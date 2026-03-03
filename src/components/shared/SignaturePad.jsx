@@ -11,12 +11,18 @@ const SignaturePadComponent = forwardRef(({ onEnd, width, height = 200 }, ref) =
         if (!canvas) return;
 
         const resizeCanvas = () => {
+            if (!canvas) return;
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
-            canvas.width = canvas.offsetWidth * ratio;
+            // Fallback width if offsetWidth is 0 during transitions
+            const width = canvas.offsetWidth || canvas.parentElement?.offsetWidth || window.innerWidth - 64;
+            canvas.width = width * ratio;
             canvas.height = (height || 200) * ratio;
+            canvas.style.width = '100%';
             canvas.style.height = `${height || 200}px`;
             canvas.getContext('2d').scale(ratio, ratio);
-            if (padRef.current) padRef.current.clear();
+            if (padRef.current) {
+                padRef.current.clear();
+            }
         };
 
         padRef.current = new SignaturePadLib(canvas, {
@@ -32,7 +38,8 @@ const SignaturePadComponent = forwardRef(({ onEnd, width, height = 200 }, ref) =
             if (onEnd) onEnd(padRef.current.toDataURL());
         });
 
-        resizeCanvas();
+        // Delay initial resize to ensure DOM is fully painted with proper dimensions
+        setTimeout(resizeCanvas, 50);
         window.addEventListener('resize', resizeCanvas);
 
         return () => {
@@ -53,10 +60,10 @@ const SignaturePadComponent = forwardRef(({ onEnd, width, height = 200 }, ref) =
     }));
 
     return (
-        <div className="signature-area">
-            <canvas ref={canvasRef} style={{ width: '100%' }} />
+        <div className="signature-area" style={{ background: '#ffffff', border: '2px solid rgba(232, 185, 74, 0.4)', borderRadius: 'var(--radius-lg)' }}>
+            <canvas ref={canvasRef} style={{ width: '100%', touchAction: 'none' }} />
             {isEmpty && (
-                <div className="placeholder">✍️ Firme aquí</div>
+                <div className="placeholder" style={{ color: '#666' }}>✍️ Firme aquí</div>
             )}
         </div>
     );
