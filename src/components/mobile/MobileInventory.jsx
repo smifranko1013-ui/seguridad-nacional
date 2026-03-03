@@ -1,15 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import StockBadge from '../shared/StockBadge';
+import BarcodeDisplay from '../shared/BarcodeDisplay';
 
 export default function MobileInventory() {
-    const { products, fetchProducts, restockProduct, addToast } = useApp();
+    const { products, fetchProducts, createProduct, updateProduct, deleteProduct, restockProduct, addToast } = useApp();
     const fileInputRef = useRef(null);
     const [importing, setImporting] = useState(false);
     const [importResult, setImportResult] = useState(null);
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [categories, setCategories] = useState([]);
+
+    // Create/Edit state
+    const [showModal, setShowModal] = useState(false);
+    const [editingProduct, setEditingProduct] = useState(null);
+    const [form, setForm] = useState({ code: '', name: '', quantity: 0, category: 'General' });
+
     const [showRestock, setShowRestock] = useState(null);
     const [restockForm, setRestockForm] = useState({ quantity: 1, supplier: '', invoice: '', notes: '' });
 
@@ -18,7 +25,46 @@ export default function MobileInventory() {
         fetch('/api/categories').then(r => r.json()).then(setCategories).catch(() => { });
     }, [search, categoryFilter]);
 
-    const openRestock = (product) => {
+    const openCreate = () => {
+        setEditingProduct(null);
+        setForm({ code: '', name: '', quantity: 0, category: 'General' });
+        setShowModal(true);
+    };
+
+    const openEdit = (product) => {
+        setEditingProduct(product);
+        setForm({ code: product.code, name: product.name, quantity: product.quantity, category: product.category });
+        setShowModal(true);
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            if (editingProduct) {
+                await updateProduct(editingProduct.id, form);
+            } else {
+                await createProduct(form);
+            }
+            setShowModal(false);
+            fetchProducts({ search, category: categoryFilter });
+        } catch (err) {
+            addToast(err.message, 'error');
+        }
+    };
+
+    const handleDelete = async (id, e) => {
+        e.stopPropagation();
+        if (!confirm('¿Eliminar este producto?')) return;
+        try {
+            await deleteProduct(id);
+            fetchProducts({ search, category: categoryFilter });
+        } catch (err) {
+            addToast(err.message, 'error');
+        }
+    };
+
+    const openRestock = (product, e) => {
+        e.stopPropagation();
         setShowRestock(product);
         setRestockForm({ quantity: 1, supplier: '', invoice: '', notes: '' });
     };
@@ -182,7 +228,7 @@ export default function MobileInventory() {
                     </div>
                 ) : (
                     products.map(p => (
-                        <div key={p.id} className="card" style={{ marginBottom: 'var(--space-sm)', padding: 'var(--space-md)' }}>
+                        <div key={p.id} className="card" onClick={() => openEdit(p)} style={{ marginBottom: 'var(--space-sm)', padding: 'var(--space-md)' }}>
                             <div className="flex justify-between items-center">
                                 <div style={{ flex: 1 }}>
                                     <div style={{ fontWeight: 700, fontSize: 'var(--font-size-sm)' }}>{p.name}</div>
@@ -194,10 +240,17 @@ export default function MobileInventory() {
                                     <StockBadge quantity={p.quantity} />
                                     <button
                                         className="btn btn-sm btn-success"
-                                        onClick={() => openRestock(p)}
+                                        onClick={(e) => openRestock(p, e)}
                                         style={{ padding: '6px 10px', fontSize: '0.75rem' }}
                                     >
                                         📥
+                                    </button>
+                                    <button
+                                        className="btn btn-sm btn-danger"
+                                        onClick={(e) => handleDelete(p.id, e)}
+                                        style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+                                    >
+                                        🗑️
                                     </button>
                                 </div>
                             </div>
@@ -205,6 +258,32 @@ export default function MobileInventory() {
                     ))
                 )}
             </div>
+
+            {/* Floating Action Button para crear producto */}
+            <button
+                className="fab"
+                onClick={openCreate}
+                style={{
+                    position: 'fixed',
+                    bottom: '80px',
+                    right: '20px',
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '30px',
+                    background: 'var(--color-accent)',
+                    color: 'var(--color-bg)',
+                    border: 'none',
+                    fontSize: '2rem',
+                    boxShadow: '0 4px 15px rgba(232, 185, 74, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    zIndex: 100
+                }}
+            >
+                +
+            </button>
 
             {/* Modal Abastecer */}
             {showRestock && (
@@ -349,6 +428,82 @@ export default function MobileInventory() {
                         <div className="modal-footer">
                             <button className="btn btn-primary" onClick={() => setImportResult(null)}>Cerrar</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Crear/Editar Producto */}
+            {showModal && (
+                <div className="modal-overlay" onClick={() => setShowModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ margin: 16, maxHeight: '90vh', overflow: 'auto' }}>
+                        <div className="modal-header">
+                            <h3>{editingProduct ? '✏️ Editar Producto' : '➕ Nuevo Producto'}</h3>
+                            <button className="btn btn-icon btn-secondary" onClick={() => setShowModal(false)}>✕</button>
+                        </div>
+                        <form onSubmit={handleSubmit}>
+                            <div className="modal-body">
+                                <div className="form-group">
+                                    <label>Código</label>
+                                    <input
+                                        className="form-control"
+                                        value={form.code}
+                                        onChange={e => setForm({ ...form, code: e.target.value })}
+                                        placeholder="Ej: SN-UNI-001"
+                                        required
+                                        disabled={!!editingProduct}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Nombre del Producto</label>
+                                    <input
+                                        className="form-control"
+                                        value={form.name}
+                                        onChange={e => setForm({ ...form, name: e.target.value })}
+                                        placeholder="Ej: Uniforme Táctico"
+                                        required
+                                    />
+                                </div>
+                                <div className="form-row">
+                                    <div className="form-group" style={{ flex: 1 }}>
+                                        <label>Cantidad</label>
+                                        <input
+                                            className="form-control"
+                                            type="number"
+                                            min="0"
+                                            value={form.quantity}
+                                            onChange={e => setForm({ ...form, quantity: parseInt(e.target.value) || 0 })}
+                                        />
+                                    </div>
+                                    <div className="form-group" style={{ flex: 2 }}>
+                                        <label>Categoría</label>
+                                        <select
+                                            className="form-control"
+                                            value={form.category}
+                                            onChange={e => setForm({ ...form, category: e.target.value })}
+                                        >
+                                            <option value="General">General</option>
+                                            <option value="Uniformes">Uniformes</option>
+                                            <option value="Comunicaciones">Comunicaciones</option>
+                                            <option value="Defensa">Defensa</option>
+                                            <option value="Tecnología">Tecnología</option>
+                                            <option value="Protección">Protección</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                {form.code && (
+                                    <div className="form-group">
+                                        <label>Vista previa Código de Barras</label>
+                                        <BarcodeDisplay value={form.code} height={40} fontSize={10} />
+                                    </div>
+                                )}
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
+                                <button type="submit" className="btn btn-primary">
+                                    {editingProduct ? '💾 Guardar' : '➕ Crear'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
