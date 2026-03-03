@@ -105,7 +105,7 @@ export default function Assignments() {
         doc.text(`Producto: ${damaged.product_name} (${damaged.product_code})`, 25, y); y += 7;
         doc.text(`Motivo: ${damaged.change_reason}`, 25, y); y += 7;
         doc.text(`Observaciones: ${damaged.observations || 'N/A'}`, 25, y); y += 7;
-        doc.text(`Fecha de daño: ${new Date(damaged.last_change_date).toLocaleString('es')}`, 25, y);
+        doc.text(`Fecha de daño: ${new Date((damaged.last_change_date || '').replace(' ', 'T') + 'Z').toLocaleString('es')}`, 25, y);
         y += 15;
 
         if (replacement) {

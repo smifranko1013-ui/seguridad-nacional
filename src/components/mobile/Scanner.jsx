@@ -218,7 +218,9 @@ export default function Scanner() {
         doc.setFont('helvetica', 'bold');
         doc.text('Fecha / Hora:', 20, y);
         doc.setFont('helvetica', 'normal');
-        doc.text(new Date(baseDelivery.created_at).toLocaleString('es'), 80, y);
+        // Fix timezone by replacing space with T and adding Z to force UTC parsing
+        const dateStr = baseDelivery.created_at ? baseDelivery.created_at.replace(' ', 'T') + 'Z' : new Date();
+        doc.text(new Date(dateStr).toLocaleString('es'), 80, y);
         y += 15;
 
         // Employee section

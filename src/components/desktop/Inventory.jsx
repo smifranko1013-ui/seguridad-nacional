@@ -181,11 +181,33 @@ export default function Inventory() {
         }
     };
 
+    const handleExportExcel = async () => {
+        try {
+            const XLSX = await import('xlsx');
+            const exportData = products.map(p => ({
+                'Código': p.code,
+                'Nombre del Producto': p.name,
+                'Categoría/Tipo': p.category,
+                'Cantidad en Stock': p.quantity
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Inventario");
+            XLSX.writeFile(workbook, `Inventario_Seguridad_Nacional_${new Date().toISOString().split('T')[0]}.xlsx`);
+            addToast('✅ Excel exportado correctamente', 'success');
+        } catch (err) {
+            addToast('❌ Error exportando Excel: ' + err.message, 'error');
+        }
+    };
+
     return (
         <div>
             <div className="page-header">
                 <h2>📦 Inventario</h2>
                 <div className="header-actions">
+                    <button className="btn btn-secondary" onClick={handleExportExcel}>
+                        📊 Exportar a Excel
+                    </button>
                     <input
                         type="file"
                         ref={fileInputRef}

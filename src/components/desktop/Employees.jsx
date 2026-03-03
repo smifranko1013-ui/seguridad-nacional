@@ -232,7 +232,7 @@ export default function Employees() {
                                                     <td>{d.product_name}</td>
                                                     <td><code style={{ color: 'var(--color-accent)' }}>{d.product_code}</code></td>
                                                     <td>{d.quantity}</td>
-                                                    <td className="text-muted">{new Date(d.created_at).toLocaleString('es')}</td>
+                                                    <td className="text-muted">{new Date((d.created_at || '').replace(' ', 'T') + 'Z').toLocaleString('es')}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

@@ -31,7 +31,7 @@ export default function MobileDeliveries() {
                             </div>
                             <div className="flex justify-between items-center" style={{ marginTop: 6 }}>
                                 <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-                                    🕐 {new Date(d.created_at).toLocaleString('es')}
+                                    🕐 {new Date((d.created_at || '').replace(' ', 'T') + 'Z').toLocaleString('es')}
                                 </span>
                                 {d.signature_data ? (
                                     <span className="stock-badge optimal" style={{ fontSize: 'var(--font-size-xs)' }}>✓ Firmado</span>

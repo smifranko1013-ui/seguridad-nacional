@@ -128,7 +128,7 @@ export default function Dashboard() {
                                             <td>{d.product_name}</td>
                                             <td>{d.employee_name}</td>
                                             <td>{d.quantity}</td>
-                                            <td className="text-muted">{new Date(d.created_at).toLocaleString('es')}</td>
+                                            <td className="text-muted">{new Date((d.created_at || '').replace(' ', 'T') + 'Z').toLocaleString('es')}</td>
                                         </tr>
                                     ))}
                                 </tbody>

@@ -183,25 +183,49 @@ export default function MobileInventory() {
         }
     };
 
+    const handleExportExcel = async () => {
+        try {
+            const XLSX = await import('xlsx');
+            const exportData = products.map(p => ({
+                'Código': p.code,
+                'Nombre del Producto': p.name,
+                'Categoría/Tipo': p.category,
+                'Cantidad en Stock': p.quantity
+            }));
+            const worksheet = XLSX.utils.json_to_sheet(exportData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Inventario");
+            XLSX.writeFile(workbook, `Inventario_Seguridad_Nacional_${new Date().toISOString().split('T')[0]}.xlsx`);
+            addToast('✅ Excel descargado', 'success');
+        } catch (err) {
+            addToast('❌ Error exportando Excel: ' + err.message, 'error');
+        }
+    };
+
     return (
         <div>
             <div className="mobile-header">
                 <h1>📦 Inventario</h1>
-                <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept=".xlsx,.xls,.csv"
-                    onChange={handleImportExcel}
-                    style={{ display: 'none' }}
-                />
-                <button
-                    className="btn btn-sm btn-success"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={importing}
-                    style={{ fontSize: '0.75rem' }}
-                >
-                    {importing ? '⏳...' : '📄 Excel'}
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="btn btn-sm btn-secondary" onClick={handleExportExcel} style={{ fontSize: '0.75rem' }}>
+                        📊 Exportar
+                    </button>
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleImportExcel}
+                        style={{ display: 'none' }}
+                    />
+                    <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={importing}
+                        style={{ fontSize: '0.75rem' }}
+                    >
+                        {importing ? '⏳...' : '📄 Importar'}
+                    </button>
+                </div>
             </div>
             <div className="mobile-content">
                 <input
