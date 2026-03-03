@@ -21,8 +21,30 @@ export default function Scanner() {
     const signatureRef = useRef(null);
     const quaggaActive = useRef(false);
 
-    // Beep sound
-    const beepAudio = useRef(new Audio('https://www.soundjay.com/buttons/sounds/beep-07a.mp3'));
+    // Web Audio API beep
+    const playBeep = useCallback(() => {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(1200, ctx.currentTime);
+
+            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.1);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.1);
+        } catch (e) {
+            console.error('Audio play failed:', e);
+        }
+    }, []);
 
     useEffect(() => {
         fetchEmployees();
@@ -112,10 +134,7 @@ export default function Scanner() {
         const product = await getProductByCode(code);
         if (product) {
             // Play beep
-            try {
-                beepAudio.current.currentTime = 0;
-                beepAudio.current.play().catch(e => console.log('Audio play failed:', e));
-            } catch (e) { /* ignore */ }
+            playBeep();
 
             setScannedProducts(current => {
                 const existingIndex = current.findIndex(item => item.product.id === product.id);
