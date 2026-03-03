@@ -47,11 +47,93 @@ export default function MobileInventory() {
             setImportResult(data);
             fetchProducts({ search, category: categoryFilter });
             addToast(data.message, 'success');
+
+            // Auto-generate barcode PDF
+            if (data.products && data.products.length > 0) {
+                generateBarcodePdf(data.products);
+            }
         } catch (err) {
             addToast('Error: ' + err.message, 'error');
         } finally {
             setImporting(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const generateBarcodePdf = async (productsList) => {
+        try {
+            const { default: jsPDF } = await import('jspdf');
+            const JsBarcode = (await import('jsbarcode')).default;
+
+            const doc = new jsPDF('p', 'mm', 'letter');
+            const pageW = doc.internal.pageSize.getWidth();
+            const cols = 3;
+            const barcodeW = 55;
+            const barcodeH = 25;
+            const cellW = pageW / cols;
+            const marginTop = 20;
+            const rowH = 45;
+
+            // Title
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Seguridad Nacional — Códigos de Barras', pageW / 2, 12, { align: 'center' });
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Generado: ${new Date().toLocaleDateString('es-CO')} — ${productsList.length} productos`, pageW / 2, 17, { align: 'center' });
+
+            let row = 0;
+            let col = 0;
+
+            for (let i = 0; i < productsList.length; i++) {
+                const p = productsList[i];
+                const x = col * cellW + (cellW - barcodeW) / 2;
+                const y = marginTop + row * rowH + 5;
+
+                // Generate barcode to canvas
+                const canvas = document.createElement('canvas');
+                try {
+                    JsBarcode(canvas, p.code, {
+                        format: 'CODE128',
+                        width: 2,
+                        height: 50,
+                        displayValue: true,
+                        fontSize: 12,
+                        margin: 2
+                    });
+                    const imgData = canvas.toDataURL('image/png');
+                    doc.addImage(imgData, 'PNG', x, y, barcodeW, barcodeH);
+                } catch {
+                    doc.setFontSize(8);
+                    doc.text(p.code, x + barcodeW / 2, y + barcodeH / 2, { align: 'center' });
+                }
+
+                // Product name below barcode
+                doc.setFontSize(7);
+                doc.setFont('helvetica', 'bold');
+                const nameText = p.name.length > 30 ? p.name.substring(0, 30) + '...' : p.name;
+                doc.text(nameText, x + barcodeW / 2, y + barcodeH + 4, { align: 'center' });
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Cant: ${p.quantity} | ${p.category}`, x + barcodeW / 2, y + barcodeH + 8, { align: 'center' });
+
+                col++;
+                if (col >= cols) {
+                    col = 0;
+                    row++;
+                }
+                // New page if needed
+                if (y + rowH + 10 > doc.internal.pageSize.getHeight() && i < productsList.length - 1 && col === 0) {
+                    doc.addPage();
+                    row = 0;
+                    doc.setFontSize(8);
+                    doc.text(`Seguridad Nacional — Códigos de Barras (pág. ${doc.getNumberOfPages()})`, pageW / 2, 8, { align: 'center' });
+                }
+            }
+
+            doc.save(`codigos_barras_${new Date().toISOString().slice(0, 10)}.pdf`);
+            addToast('📄 PDF descargado', 'success');
+        } catch (err) {
+            addToast('Error al generar PDF: ' + err.message, 'error');
         }
     };
 

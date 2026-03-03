@@ -177,7 +177,7 @@ app.post('/api/products/import-excel', upload.single('file'), (req, res) => {
 
         if (rows.length === 0) return res.status(400).json({ error: 'El archivo está vacío' });
 
-        const results = { created: 0, updated: 0, errors: [] };
+        const results = { created: 0, updated: 0, errors: [], products: [] };
 
         const insertStmt = db.prepare(`
             INSERT INTO products (code, name, quantity, category, barcode_data)
@@ -214,6 +214,7 @@ app.post('/api/products/import-excel', upload.single('file'), (req, res) => {
                     insertStmt.run(code, name, qty, category, code);
                     results.created++;
                 }
+                results.products.push({ code, name, quantity: qty, category });
             }
         });
 
