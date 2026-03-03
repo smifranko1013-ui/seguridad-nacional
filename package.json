@@ -1,0 +1,37 @@
+{
+  "name": "seguridad-nacional",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server/server.js",
+    "start": "node server/server.js",
+    "prod": "vite build && node server/server.js",
+    "dev:full": "concurrently \"npm run server\" \"npm run dev\""
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "jsbarcode": "^3.11.6",
+    "signature_pad": "^4.1.7",
+    "jspdf": "^2.5.1",
+    "@ericblade/quagga2": "^1.8.4",
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.3",
+    "cors": "^2.8.5",
+    "socket.io": "^4.7.4",
+    "socket.io-client": "^4.7.4",
+    "multer": "^1.4.5-lts.1",
+    "concurrently": "^8.2.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.8"
+  }
+}
