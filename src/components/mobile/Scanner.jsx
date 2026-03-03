@@ -22,11 +22,20 @@ export default function Scanner() {
     const quaggaActive = useRef(false);
 
     // Web Audio API beep
+    const audioCtxRef = useRef(null);
     const playBeep = useCallback(() => {
         try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContext) return;
-            const ctx = new AudioContext();
+            if (!audioCtxRef.current) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                audioCtxRef.current = new AudioContext();
+            }
+            const ctx = audioCtxRef.current;
+
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+
             const oscillator = ctx.createOscillator();
             const gainNode = ctx.createGain();
 

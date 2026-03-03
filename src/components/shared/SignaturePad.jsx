@@ -6,6 +6,12 @@ const SignaturePadComponent = forwardRef(({ onEnd, width, height = 200 }, ref) =
     const padRef = useRef(null);
     const [isEmpty, setIsEmpty] = useState(true);
 
+    const latestOnEnd = useRef(onEnd);
+
+    useEffect(() => {
+        latestOnEnd.current = onEnd;
+    }, [onEnd]);
+
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -35,7 +41,7 @@ const SignaturePadComponent = forwardRef(({ onEnd, width, height = 200 }, ref) =
 
         padRef.current.addEventListener('endStroke', () => {
             setIsEmpty(padRef.current.isEmpty());
-            if (onEnd) onEnd(padRef.current.toDataURL());
+            if (latestOnEnd.current) latestOnEnd.current(padRef.current.toDataURL());
         });
 
         // Delay initial resize to ensure DOM is fully painted with proper dimensions
@@ -46,7 +52,7 @@ const SignaturePadComponent = forwardRef(({ onEnd, width, height = 200 }, ref) =
             window.removeEventListener('resize', resizeCanvas);
             if (padRef.current) padRef.current.off();
         };
-    }, [height, onEnd]);
+    }, [height]); // Removed onEnd to prevent canvas crashing from re-renders
 
     useImperativeHandle(ref, () => ({
         clear: () => {
