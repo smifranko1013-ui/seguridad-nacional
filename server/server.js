@@ -4,6 +4,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
+import XLSX from 'xlsx';
 import db from './database.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -159,6 +161,72 @@ app.post('/api/products/:id/restock', (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// Import products from Excel
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+app.post('/api/products/import-excel', upload.single('file'), (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'No se envió ningún archivo' });
+
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        if (rows.length === 0) return res.status(400).json({ error: 'El archivo está vacío' });
+
+        const results = { created: 0, updated: 0, errors: [] };
+
+        const insertStmt = db.prepare(`
+            INSERT INTO products (code, name, quantity, category, barcode_data)
+            VALUES (?, ?, ?, ?, ?)
+        `);
+        const updateStmt = db.prepare(`
+            UPDATE products SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE code = ?
+        `);
+        const findStmt = db.prepare('SELECT * FROM products WHERE code = ?');
+
+        const importAll = db.transaction(() => {
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                // Flexible column matching (case-insensitive, common variants)
+                const code = String(row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || row.Código || row.código || '').trim();
+                const name = String(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || row.producto || row.Producto || row.PRODUCTO || '').trim();
+                const qty = parseInt(row.cantidad || row.Cantidad || row.CANTIDAD || row.quantity || row.Quantity || row.QUANTITY || row.qty || row.Qty || 0);
+                const category = String(row.categoria || row.Categoria || row.CATEGORIA || row.Categoría || row.categoría || row.category || 'General').trim();
+
+                if (!code || !name) {
+                    results.errors.push(`Fila ${i + 2}: código o nombre vacío`);
+                    continue;
+                }
+                if (!qty || qty <= 0) {
+                    results.errors.push(`Fila ${i + 2}: cantidad inválida para ${code}`);
+                    continue;
+                }
+
+                const existing = findStmt.get(code);
+                if (existing) {
+                    updateStmt.run(qty, code);
+                    results.updated++;
+                } else {
+                    insertStmt.run(code, name, qty, category, code);
+                    results.created++;
+                }
+            }
+        });
+
+        importAll();
+
+        emitUpdate('product:updated', {});
+        res.json({
+            message: `Importación completada: ${results.created} creados, ${results.updated} actualizados`,
+            ...results,
+            total: rows.length
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Error procesando archivo: ' + error.message });
     }
 });
 

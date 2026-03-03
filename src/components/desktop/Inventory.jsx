@@ -1,10 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import StockBadge from '../shared/StockBadge';
 import BarcodeDisplay from '../shared/BarcodeDisplay';
 
 export default function Inventory() {
     const { products, fetchProducts, createProduct, updateProduct, deleteProduct, restockProduct, addToast } = useApp();
+    const fileInputRef = useRef(null);
+    const [importing, setImporting] = useState(false);
+    const [importResult, setImportResult] = useState(null);
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
@@ -75,11 +78,46 @@ export default function Inventory() {
         }
     };
 
+    const handleImportExcel = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setImporting(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch('/api/products/import-excel', { method: 'POST', body: formData });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error);
+            setImportResult(data);
+            fetchProducts({ search, category: categoryFilter });
+            addToast(data.message, 'success');
+        } catch (err) {
+            addToast('Error importando: ' + err.message, 'error');
+        } finally {
+            setImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
     return (
         <div>
             <div className="page-header">
                 <h2>📦 Inventario</h2>
                 <div className="header-actions">
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept=".xlsx,.xls,.csv"
+                        onChange={handleImportExcel}
+                        style={{ display: 'none' }}
+                    />
+                    <button
+                        className="btn btn-success"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={importing}
+                    >
+                        {importing ? '⏳ Importando...' : '📄 Importar Excel'}
+                    </button>
                     <button className="btn btn-primary" onClick={openCreate}>➕ Nuevo Producto</button>
                 </div>
             </div>
@@ -349,6 +387,62 @@ export default function Inventory() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Resultado Importación */}
+            {importResult && (
+                <div className="modal-overlay" onClick={() => setImportResult(null)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>📄 Resultado de Importación</h3>
+                            <button className="btn btn-icon btn-secondary" onClick={() => setImportResult(null)}>✕</button>
+                        </div>
+                        <div className="modal-body">
+                            <div style={{ display: 'flex', gap: 'var(--space-md)', marginBottom: 'var(--space-md)' }}>
+                                <div className="card" style={{ flex: 1, textAlign: 'center', padding: 'var(--space-md)' }}>
+                                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-success)' }}>{importResult.created}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Creados</div>
+                                </div>
+                                <div className="card" style={{ flex: 1, textAlign: 'center', padding: 'var(--space-md)' }}>
+                                    <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--color-accent)' }}>{importResult.updated}</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Actualizados</div>
+                                </div>
+                                <div className="card" style={{ flex: 1, textAlign: 'center', padding: 'var(--space-md)' }}>
+                                    <div style={{ fontSize: '2rem', fontWeight: 800, color: importResult.errors?.length ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
+                                        {importResult.errors?.length || 0}
+                                    </div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Errores</div>
+                                </div>
+                            </div>
+                            {importResult.errors?.length > 0 && (
+                                <div style={{
+                                    background: 'rgba(239,68,68,0.08)',
+                                    border: '1px solid rgba(239,68,68,0.2)',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: 'var(--space-sm)',
+                                    maxHeight: 150,
+                                    overflow: 'auto',
+                                    fontSize: '0.8rem'
+                                }}>
+                                    {importResult.errors.map((err, i) => <div key={i} style={{ padding: '4px 0' }}>⚠️ {err}</div>)}
+                                </div>
+                            )}
+                            <div style={{
+                                marginTop: 'var(--space-md)',
+                                padding: 'var(--space-sm)',
+                                background: 'rgba(232,185,74,0.06)',
+                                borderRadius: 'var(--radius-md)',
+                                fontSize: '0.8rem',
+                                color: 'var(--color-text-muted)'
+                            }}>
+                                💡 Formato esperado: columnas <strong>codigo</strong>, <strong>nombre</strong>, <strong>cantidad</strong> y opcionalmente <strong>categoria</strong>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-primary" onClick={() => setImportResult(null)}>Cerrar</button>
+                        </div>
                     </div>
                 </div>
             )}
