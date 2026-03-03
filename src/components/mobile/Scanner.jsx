@@ -39,17 +39,20 @@ export default function Scanner() {
             const oscillator = ctx.createOscillator();
             const gainNode = ctx.createGain();
 
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(1200, ctx.currentTime);
+            // Use square wave for a harsher, more "barcode scanner-like" sound or sine for clean beep.
+            // A mix or high-freq sine works best.
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(2500, ctx.currentTime); // Much higher pitch
 
-            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(1.0, ctx.currentTime); // Max volume
+            // Slightly longer fade out so it's not cut off too abruptly
+            gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.15);
 
             oscillator.connect(gainNode);
             gainNode.connect(ctx.destination);
 
             oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.1);
+            oscillator.stop(ctx.currentTime + 0.15);
         } catch (e) {
             console.error('Audio play failed:', e);
         }
