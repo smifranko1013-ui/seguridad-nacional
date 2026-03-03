@@ -578,7 +578,7 @@ export default function Scanner() {
                     </div>
 
                     <div style={{ background: '#fff', borderRadius: 'var(--radius-lg)', padding: 'var(--space-md)', marginBottom: 'var(--space-lg)', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-                        <SignaturePadComponent ref={signatureRef} onEnd={handleSignatureEnd} />
+                        <SignaturePadComponent ref={signatureRef} />
                         <div style={{ textAlign: 'right', marginTop: 'var(--space-sm)' }}>
                             <button className="btn btn-sm btn-secondary" onClick={() => signatureRef.current?.clear()}>
                                 Borrar firma
