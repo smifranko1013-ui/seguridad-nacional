@@ -21,6 +21,9 @@ export default function Scanner() {
     const signatureRef = useRef(null);
     const quaggaActive = useRef(false);
 
+    // Beep sound
+    const beepAudio = useRef(new Audio('https://www.soundjay.com/buttons/sounds/beep-07a.mp3'));
+
     useEffect(() => {
         fetchEmployees();
     }, [fetchEmployees]);
@@ -108,6 +111,12 @@ export default function Scanner() {
     const handleCodeScanned = async (code) => {
         const product = await getProductByCode(code);
         if (product) {
+            // Play beep
+            try {
+                beepAudio.current.currentTime = 0;
+                beepAudio.current.play().catch(e => console.log('Audio play failed:', e));
+            } catch (e) { /* ignore */ }
+
             setScannedProducts(current => {
                 const existingIndex = current.findIndex(item => item.product.id === product.id);
                 if (existingIndex >= 0) {
@@ -117,7 +126,7 @@ export default function Scanner() {
                     return newList;
                 } else {
                     addToast(`Producto agregado: ${product.name}`, 'success');
-                    return [...current, { product, quantity: 1 }];
+                    return [{ product, quantity: 1 }, ...current]; // Add to top for better visibility
                 }
             });
         } else {
@@ -427,10 +436,29 @@ export default function Scanner() {
                         </div>
                     </div>
 
-                    <div style={{ padding: 'var(--space-md)', textAlign: 'center' }}>
-                        <div style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'bold', marginBottom: 'var(--space-sm)' }}>
-                            Escaneados: <span style={{ color: 'var(--color-accent)' }}>{scannedProducts.reduce((acc, item) => acc + item.quantity, 0)}</span> items
+                    {/* SCANNED ITEMS LIST COMPACT */}
+                    {scannedProducts.length > 0 && (
+                        <div style={{ padding: '0 var(--space-md)', marginBottom: 'var(--space-md)' }}>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--color-text-secondary)', marginBottom: 'var(--space-sm)' }}>
+                                Últimos escaneados ({scannedProducts.length} items):
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '150px', overflowY: 'auto' }}>
+                                {scannedProducts.map(item => (
+                                    <div key={item.product.id} className="card" style={{ padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-bg-secondary)' }}>
+                                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                                            <div style={{ fontWeight: '600', fontSize: '0.85rem', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>{item.product.name}</div>
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>{item.product.code}</div>
+                                        </div>
+                                        <div style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--color-accent)', marginLeft: '10px' }}>
+                                            x{item.quantity}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+                    )}
+
+                    <div style={{ padding: 'var(--space-md)', textAlign: 'center', marginTop: 'auto' }}>
                         <button
                             className="btn btn-primary"
                             style={{ padding: '15px 30px', fontSize: '1.2rem', width: '100%' }}
@@ -442,7 +470,7 @@ export default function Scanner() {
                                 setStep('review');
                             }}
                         >
-                            📋 Revisar y Continuar
+                            📋 Revisar {scannedProducts.reduce((acc, item) => acc + item.quantity, 0)} items y Continuar
                         </button>
                     </div>
                 </div>
