@@ -432,6 +432,79 @@ app.post('/api/deliveries', (req, res) => {
     }
 });
 
+// Create bulk delivery (multiple products for one employee)
+app.post('/api/deliveries/bulk', (req, res) => {
+    try {
+        const { employee_id, products, signature_data, delivered_by, notes } = req.body;
+        if (!employee_id || !products || !products.length) {
+            return res.status(400).json({ error: 'Empleado y productos son requeridos' });
+        }
+
+        // Validate all products stock first
+        const productInfos = [];
+        for (const p of products) {
+            const qty = p.quantity || 1;
+            const product = db.prepare('SELECT * FROM products WHERE id = ?').get(p.id);
+            if (!product) return res.status(404).json({ error: `Producto ID ${p.id} no encontrado` });
+            if (product.quantity < qty) {
+                return res.status(400).json({ error: `Stock insuficiente para ${product.name}. Disponible: ${product.quantity}` });
+            }
+            productInfos.push({ product, qty });
+        }
+
+        const deliveryIds = [];
+
+        // Transaction for all operations
+        const createBulkDeliveries = db.transaction(() => {
+            for (const { product, qty } of productInfos) {
+                // Insert delivery
+                const result = db.prepare(`
+                    INSERT INTO deliveries (product_id, employee_id, quantity, signature_data, delivered_by, notes)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `).run(product.id, employee_id, qty, signature_data || '', delivered_by || 'Sistema', notes || '');
+
+                const deliveryId = result.lastInsertRowid;
+                deliveryIds.push(deliveryId);
+
+                // Decrement stock
+                db.prepare(`
+                    UPDATE products SET quantity = quantity - ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                `).run(qty, product.id);
+
+                // Create assignment
+                db.prepare(`
+                    INSERT INTO assignments (delivery_id, product_id, employee_id, quantity, status, change_reason, observations, last_change_date)
+                    VALUES (?, ?, ?, ?, 'activo', 'Asignación inicial', ?, CURRENT_TIMESTAMP)
+                `).run(deliveryId, product.id, employee_id, qty, notes || '');
+            }
+        });
+
+        createBulkDeliveries();
+
+        // Get full data for response
+        const placeholders = deliveryIds.map(() => '?').join(',');
+        const deliveries = db.prepare(`
+            SELECT d.*, p.name as product_name, p.code as product_code, p.category,
+                   e.name as employee_name, e.employee_id as employee_code, e.department
+            FROM deliveries d
+            JOIN products p ON d.product_id = p.id
+            JOIN employees e ON d.employee_id = e.id
+            WHERE d.id IN (${placeholders})
+        `).all(...deliveryIds);
+
+        // Emit updates
+        for (const delivery of deliveries) {
+            emitUpdate('delivery:created', delivery);
+        }
+        emitUpdate('product:updated', {});
+        emitUpdate('assignment:created', { employee_id });
+
+        res.status(201).json(deliveries);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 // ─── ASSIGNMENTS API ───
 
 // Get all assignments (with filters)

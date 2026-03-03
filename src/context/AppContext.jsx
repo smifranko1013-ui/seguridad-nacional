@@ -164,6 +164,20 @@ export function AppProvider({ children }) {
         return res.json();
     }, [addToast]);
 
+    const createBulkDelivery = useCallback(async (data) => {
+        const res = await fetch('/api/deliveries/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error);
+        }
+        addToast('Equipos asignados exitosamente', 'success');
+        return res.json();
+    }, [addToast]);
+
     const getProductByCode = useCallback(async (code) => {
         const res = await fetch(`/api/products/code/${code}`);
         if (!res.ok) return null;
@@ -268,7 +282,7 @@ export function AppProvider({ children }) {
         fetchProducts, fetchEmployees, fetchDeliveries, fetchStats,
         createProduct, updateProduct, deleteProduct, restockProduct,
         createEmployee, updateEmployee, deleteEmployee,
-        createDelivery, getProductByCode, getEmployeeDetails,
+        createDelivery, createBulkDelivery, getProductByCode, getEmployeeDetails,
         fetchAssignments, getEmployeeAssignments, returnAssignment, reportDamage,
         addToast
     };
