@@ -104,6 +104,21 @@ export function AppProvider({ children }) {
         addToast('Producto eliminado', 'success');
     }, [addToast]);
 
+    const restockProduct = useCallback(async (id, data) => {
+        const res = await fetch(`/api/products/${id}/restock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error);
+        }
+        const result = await res.json();
+        addToast(`✅ +${data.quantity} unidades de ${result.name}`, 'success');
+        return result;
+    }, [addToast]);
+
     const createEmployee = useCallback(async (employee) => {
         const res = await fetch('/api/employees', {
             method: 'POST',
@@ -251,7 +266,7 @@ export function AppProvider({ children }) {
     const value = {
         products, employees, deliveries, stats, toasts, loading,
         fetchProducts, fetchEmployees, fetchDeliveries, fetchStats,
-        createProduct, updateProduct, deleteProduct,
+        createProduct, updateProduct, deleteProduct, restockProduct,
         createEmployee, updateEmployee, deleteEmployee,
         createDelivery, getProductByCode, getEmployeeDetails,
         fetchAssignments, getEmployeeAssignments, returnAssignment, reportDamage,

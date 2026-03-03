@@ -4,14 +4,17 @@ import StockBadge from '../shared/StockBadge';
 import BarcodeDisplay from '../shared/BarcodeDisplay';
 
 export default function Inventory() {
-    const { products, fetchProducts, createProduct, updateProduct, deleteProduct, addToast } = useApp();
+    const { products, fetchProducts, createProduct, updateProduct, deleteProduct, restockProduct, addToast } = useApp();
     const [search, setSearch] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
+    const [showRestockModal, setShowRestockModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
+    const [restockingProduct, setRestockingProduct] = useState(null);
     const [showBarcode, setShowBarcode] = useState(null);
     const [categories, setCategories] = useState([]);
     const [form, setForm] = useState({ code: '', name: '', quantity: 0, category: 'General' });
+    const [restockForm, setRestockForm] = useState({ quantity: 1, supplier: '', invoice: '', notes: '' });
 
     useEffect(() => {
         fetchProducts({ search, category: categoryFilter });
@@ -30,6 +33,12 @@ export default function Inventory() {
         setShowModal(true);
     };
 
+    const openRestock = (product) => {
+        setRestockingProduct(product);
+        setRestockForm({ quantity: 1, supplier: '', invoice: '', notes: '' });
+        setShowRestockModal(true);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -39,6 +48,17 @@ export default function Inventory() {
                 await createProduct(form);
             }
             setShowModal(false);
+            fetchProducts({ search, category: categoryFilter });
+        } catch (err) {
+            addToast(err.message, 'error');
+        }
+    };
+
+    const handleRestock = async (e) => {
+        e.preventDefault();
+        try {
+            await restockProduct(restockingProduct.id, restockForm);
+            setShowRestockModal(false);
             fetchProducts({ search, category: categoryFilter });
         } catch (err) {
             addToast(err.message, 'error');
@@ -137,6 +157,13 @@ export default function Inventory() {
                                         </td>
                                         <td>
                                             <div className="flex gap-sm">
+                                                <button
+                                                    className="btn btn-sm btn-success"
+                                                    onClick={() => openRestock(product)}
+                                                    title="Agregar stock"
+                                                >
+                                                    📥 Abastecer
+                                                </button>
                                                 <button className="btn btn-sm btn-secondary" onClick={() => openEdit(product)}>✏️</button>
                                                 <button className="btn btn-sm btn-danger" onClick={() => handleDelete(product.id)}>🗑️</button>
                                             </div>
@@ -149,7 +176,7 @@ export default function Inventory() {
                 </div>
             </div>
 
-            {/* Modal */}
+            {/* Modal Crear/Editar */}
             {showModal && (
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
@@ -218,6 +245,107 @@ export default function Inventory() {
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
                                 <button type="submit" className="btn btn-primary">
                                     {editingProduct ? '💾 Guardar Cambios' : '➕ Crear Producto'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal Abastecer Inventario */}
+            {showRestockModal && restockingProduct && (
+                <div className="modal-overlay" onClick={() => setShowRestockModal(false)}>
+                    <div className="modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h3>📥 Abastecer Inventario</h3>
+                            <button className="btn btn-icon btn-secondary" onClick={() => setShowRestockModal(false)}>✕</button>
+                        </div>
+                        <form onSubmit={handleRestock}>
+                            <div className="modal-body">
+                                {/* Product info card */}
+                                <div style={{
+                                    background: 'var(--color-accent-alpha, rgba(232,185,74,0.06))',
+                                    border: '1px solid var(--color-accent-dim, rgba(232,185,74,0.15))',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: 'var(--space-md)',
+                                    marginBottom: 'var(--space-lg)',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}>
+                                    <div>
+                                        <div style={{ fontWeight: 700, fontSize: '1.05rem' }}>{restockingProduct.name}</div>
+                                        <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>
+                                            {restockingProduct.code} • {restockingProduct.category}
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--color-accent)' }}>
+                                            {restockingProduct.quantity}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Stock actual</div>
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>📦 Cantidad a agregar *</label>
+                                    <input
+                                        className="form-control"
+                                        type="number"
+                                        min="1"
+                                        value={restockForm.quantity}
+                                        onChange={e => setRestockForm({ ...restockForm, quantity: parseInt(e.target.value) || 1 })}
+                                        style={{ fontSize: '1.2rem', fontWeight: 700, textAlign: 'center' }}
+                                        required
+                                        autoFocus
+                                    />
+                                    <div style={{
+                                        textAlign: 'center',
+                                        marginTop: 8,
+                                        color: 'var(--color-success)',
+                                        fontWeight: 600,
+                                        fontSize: '0.85rem'
+                                    }}>
+                                        Nuevo stock: {restockingProduct.quantity + (parseInt(restockForm.quantity) || 0)} unidades
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>🏢 Proveedor</label>
+                                    <input
+                                        className="form-control"
+                                        value={restockForm.supplier}
+                                        onChange={e => setRestockForm({ ...restockForm, supplier: e.target.value })}
+                                        placeholder="Nombre del proveedor"
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label>🧾 N° Factura / Remisión</label>
+                                    <input
+                                        className="form-control"
+                                        value={restockForm.invoice}
+                                        onChange={e => setRestockForm({ ...restockForm, invoice: e.target.value })}
+                                        placeholder="Ej: FAC-2026-0045"
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label>📝 Observaciones</label>
+                                    <textarea
+                                        className="form-control"
+                                        rows="2"
+                                        value={restockForm.notes}
+                                        onChange={e => setRestockForm({ ...restockForm, notes: e.target.value })}
+                                        placeholder="Notas adicionales sobre esta entrada de inventario..."
+                                        style={{ resize: 'vertical' }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowRestockModal(false)}>Cancelar</button>
+                                <button type="submit" className="btn btn-success" style={{ fontWeight: 700 }}>
+                                    📥 Agregar {restockForm.quantity} unidades
                                 </button>
                             </div>
                         </form>

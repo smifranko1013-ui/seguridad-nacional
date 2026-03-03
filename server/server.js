@@ -122,6 +122,46 @@ app.put('/api/products/:id', (req, res) => {
     }
 });
 
+// Restock product (add inventory)
+app.post('/api/products/:id/restock', (req, res) => {
+    try {
+        const { quantity, supplier, invoice, notes } = req.body;
+        const qty = parseInt(quantity);
+        if (!qty || qty <= 0) return res.status(400).json({ error: 'Cantidad debe ser mayor a 0' });
+
+        const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+        if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
+
+        db.prepare(`
+      UPDATE products SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(qty, req.params.id);
+
+        // Log the restock in a restock_log if table exists, or just update
+        const updatedProduct = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+        emitUpdate('product:updated', updatedProduct);
+        emitUpdate('restock:created', {
+            product_id: updatedProduct.id,
+            product_name: updatedProduct.name,
+            product_code: updatedProduct.code,
+            quantity_added: qty,
+            new_quantity: updatedProduct.quantity,
+            supplier: supplier || '',
+            invoice: invoice || '',
+            notes: notes || '',
+            date: new Date().toISOString()
+        });
+
+        res.json({
+            ...updatedProduct,
+            quantity_added: qty,
+            message: `Se agregaron ${qty} unidades a ${updatedProduct.name}`
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Delete product
 app.delete('/api/products/:id', (req, res) => {
     try {
