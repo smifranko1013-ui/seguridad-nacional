@@ -173,9 +173,120 @@ app.post('/api/products/import-excel', upload.single('file'), (req, res) => {
         const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
+        // Helper: normalize a string by stripping accents, lowercasing, removing extra spaces
+        const normalize = (str) => String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+        // Helper: safely parse a number from any value
+        const safeParseInt = (val) => {
+            if (val === '' || val === null || val === undefined) return NaN;
+            const n = Number(val);
+            return isNaN(n) ? NaN : Math.floor(n);
+        };
+
+        // --- SMART COLUMN DETECTION ---
+        // Keywords that identify each field type (checked via "contains")
+        const codeKeywords = ['codigo', 'code', 'cod', 'sku', 'referencia', 'ref', 'id producto', 'item'];
+        const nameKeywords = ['nombre', 'name', 'producto', 'descripcion', 'description', 'articulo', 'material'];
+        const qtyKeywords = ['cantidad', 'quantity', 'qty', 'stock', 'unidades', 'existencia', 'cant', 'piezas'];
+        const catKeywords = ['categoria', 'category', 'tipo', 'type', 'grupo', 'clase', 'linea', 'familia'];
+
+        // Get headers from the sheet
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
         if (rows.length === 0) return res.status(400).json({ error: 'El archivo está vacío' });
+
+        const headers = Object.keys(rows[0]);
+        const normalizedHeaders = headers.map(h => ({ original: h, normalized: normalize(h) }));
+
+        // Try to match a header to keywords
+        const findColumn = (keywords) => {
+            for (const kw of keywords) {
+                for (const h of normalizedHeaders) {
+                    // Exact match after normalization
+                    if (h.normalized === kw) return h.original;
+                }
+            }
+            // Partial match (header contains keyword or keyword contains header)
+            for (const kw of keywords) {
+                for (const h of normalizedHeaders) {
+                    if (h.normalized.includes(kw) || kw.includes(h.normalized)) return h.original;
+                }
+            }
+            return null;
+        };
+
+        let codeCol = findColumn(codeKeywords);
+        let nameCol = findColumn(nameKeywords);
+        let qtyCol = findColumn(qtyKeywords);
+        let catCol = findColumn(catKeywords);
+
+        // Fallback: if we couldn't detect code AND name columns, try positional mapping
+        let usedPositional = false;
+        if (!codeCol && !nameCol) {
+            // Maybe the headers themselves are data (no header row) — try with raw cells
+            // Or the columns just have unusual names — map by position
+            if (headers.length >= 2) {
+                codeCol = headers[0];
+                nameCol = headers[1];
+                qtyCol = headers.length >= 3 ? headers[2] : null;
+                catCol = headers.length >= 4 ? headers[3] : null;
+                usedPositional = true;
+
+                // Check if the first "row" is actually a header that we didn't recognize
+                // If first row values look like headers (all strings, no numbers), re-read with header:1
+                const firstVals = headers.map(h => rows[0][h]);
+                const allStrings = firstVals.every(v => typeof v === 'string' && v.length > 0 && isNaN(Number(v)));
+                if (allStrings && rows.length > 1) {
+                    // The first row IS a header row, but XLSX didn't match our patterns
+                    // Use the raw first-row values as the column mapping
+                    const rawHeaders = firstVals.map(v => normalize(String(v)));
+
+                    // Re-detect with raw header values
+                    const findInRaw = (keywords) => {
+                        for (const kw of keywords) {
+                            for (let idx = 0; idx < rawHeaders.length; idx++) {
+                                if (rawHeaders[idx] === kw || rawHeaders[idx].includes(kw) || kw.includes(rawHeaders[idx])) {
+                                    return { col: headers[idx], idx };
+                                }
+                            }
+                        }
+                        return null;
+                    };
+
+                    const rawCode = findInRaw(codeKeywords);
+                    const rawName = findInRaw(nameKeywords);
+                    if (rawCode && rawName) {
+                        codeCol = rawCode.col;
+                        nameCol = rawName.col;
+                        const rawQty = findInRaw(qtyKeywords);
+                        const rawCat = findInRaw(catKeywords);
+                        qtyCol = rawQty ? rawQty.col : null;
+                        catCol = rawCat ? rawCat.col : null;
+                        // Skip first row since it's a header
+                        rows.shift();
+                        usedPositional = false;
+                    }
+                }
+            }
+        }
+
+        const columnMapping = {
+            code: codeCol || '(no detectada)',
+            name: nameCol || '(no detectada)',
+            quantity: qtyCol || '(no detectada)',
+            category: catCol || '(no detectada)',
+            positional: usedPositional,
+            availableHeaders: headers
+        };
+
+        console.log('📊 Excel Import — Column mapping:', JSON.stringify(columnMapping, null, 2));
+
+        if (!codeCol || !nameCol) {
+            return res.status(400).json({
+                error: `No se pudieron detectar las columnas de código y nombre. Columnas encontradas: ${headers.join(', ')}. Use columnas llamadas "codigo" y "nombre" o "code" y "name".`,
+                columnMapping
+            });
+        }
 
         const results = { created: 0, updated: 0, errors: [], products: [] };
 
@@ -184,37 +295,41 @@ app.post('/api/products/import-excel', upload.single('file'), (req, res) => {
             VALUES (?, ?, ?, ?, ?)
         `);
         const updateStmt = db.prepare(`
-            UPDATE products SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE code = ?
+            UPDATE products SET name = ?, quantity = quantity + ?, category = ?, updated_at = CURRENT_TIMESTAMP WHERE code = ?
         `);
         const findStmt = db.prepare('SELECT * FROM products WHERE code = ?');
 
         const importAll = db.transaction(() => {
             for (let i = 0; i < rows.length; i++) {
                 const row = rows[i];
-                // Flexible column matching (case-insensitive, common variants)
-                const code = String(row.codigo || row.Codigo || row.CODIGO || row.code || row.Code || row.CODE || row.Código || row.código || '').trim();
-                const name = String(row.nombre || row.Nombre || row.NOMBRE || row.name || row.Name || row.NAME || row.producto || row.Producto || row.PRODUCTO || '').trim();
-                const qty = parseInt(row.cantidad || row.Cantidad || row.CANTIDAD || row.quantity || row.Quantity || row.QUANTITY || row.qty || row.Qty || 0);
-                const category = String(row.categoria || row.Categoria || row.CATEGORIA || row.Categoría || row.categoría || row.category || 'General').trim();
+                try {
+                    const code = String(row[codeCol] ?? '').trim();
+                    const name = String(row[nameCol] ?? '').trim();
+                    const rawQty = qtyCol ? row[qtyCol] : 0;
+                    const qty = safeParseInt(rawQty);
+                    const category = catCol ? String(row[catCol] ?? 'General').trim() || 'General' : 'General';
 
-                if (!code || !name) {
-                    results.errors.push(`Fila ${i + 2}: código o nombre vacío`);
-                    continue;
-                }
-                if (!qty || qty <= 0) {
-                    results.errors.push(`Fila ${i + 2}: cantidad inválida para ${code}`);
-                    continue;
-                }
+                    if (!code || !name) {
+                        results.errors.push(`Fila ${i + 2}: código o nombre vacío (código="${code}", nombre="${name}")`);
+                        continue;
+                    }
+                    if (isNaN(qty) || qty < 0) {
+                        results.errors.push(`Fila ${i + 2}: cantidad inválida (${rawQty}) para ${code}`);
+                        continue;
+                    }
 
-                const existing = findStmt.get(code);
-                if (existing) {
-                    updateStmt.run(qty, code);
-                    results.updated++;
-                } else {
-                    insertStmt.run(code, name, qty, category, code);
-                    results.created++;
+                    const existing = findStmt.get(code);
+                    if (existing) {
+                        updateStmt.run(name, qty, category, code);
+                        results.updated++;
+                    } else {
+                        insertStmt.run(code, name, qty, category, code);
+                        results.created++;
+                    }
+                    results.products.push({ code, name, quantity: qty, category });
+                } catch (rowError) {
+                    results.errors.push(`Fila ${i + 2}: ${rowError.message}`);
                 }
-                results.products.push({ code, name, quantity: qty, category });
             }
         });
 
@@ -224,7 +339,8 @@ app.post('/api/products/import-excel', upload.single('file'), (req, res) => {
         res.json({
             message: `Importación completada: ${results.created} creados, ${results.updated} actualizados`,
             ...results,
-            total: rows.length
+            total: rows.length,
+            columnMapping
         });
     } catch (error) {
         res.status(500).json({ error: 'Error procesando archivo: ' + error.message });
