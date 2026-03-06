@@ -77,7 +77,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_assignments_employee ON assignments(employee_id);
   CREATE INDEX IF NOT EXISTS idx_assignments_status ON assignments(status);
   CREATE INDEX IF NOT EXISTS idx_assignments_product ON assignments(product_id);
+
+  CREATE TABLE IF NOT EXISTS counters (
+    key TEXT PRIMARY KEY,
+    value INTEGER DEFAULT 0
+  );
 `);
+
+// Ensure acta_entrega counter exists
+const actaCounter = db.prepare('SELECT * FROM counters WHERE key = ?').get('acta_entrega');
+if (!actaCounter) {
+  db.prepare('INSERT INTO counters (key, value) VALUES (?, ?)').run('acta_entrega', 0);
+}
 
 // Seed some sample data if the database is empty
 const productCount = db.prepare('SELECT COUNT(*) as count FROM products').get();

@@ -187,120 +187,148 @@ export default function Scanner() {
     };
 
     // --------- STEP 4 & 5: SIGNATURE & REVISION ---------
-    const generatePDF = (deliveriesArr) => {
+    const generatePDF = (deliveriesArr, actaNumber) => {
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
+        const contentWidth = pageWidth - margin * 2;
+        const year = new Date().getFullYear();
+        const actaStr = String(actaNumber).padStart(4, '0');
 
-        // Header
+        // ===== HEADER: Logo area =====
         doc.setFillColor(10, 22, 40);
-        doc.rect(0, 0, pageWidth, 45, 'F');
-        doc.setTextColor(201, 168, 76);
-        doc.setFontSize(22);
+        doc.roundedRect(margin, 12, 70, 22, 3, 3, 'F');
+        // Shield icon (simplified)
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
-        doc.text('SEGURIDAD NACIONAL', pageWidth / 2, 20, { align: 'center' });
-        doc.setFontSize(12);
-        doc.setTextColor(136, 153, 179);
-        doc.text('Formato de Asignación / Entrega Múltiple', pageWidth / 2, 32, { align: 'center' });
-
-        // Content
-        doc.setTextColor(0, 0, 0);
+        doc.text('🛡', margin + 5, 24);
         doc.setFontSize(11);
-        let y = 60;
+        doc.text('SEGURIDAD', margin + 14, 21);
+        doc.text('NACIONAL', margin + 14, 27);
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(180, 180, 180);
+        doc.text('LTDA.', margin + 52, 21);
+        doc.setFontSize(6);
+        doc.text('Sabemos de seguridad', margin + 14, 32);
 
-        // Delivery Info (assume all share same timestamp and employee)
+        // ===== TITLE =====
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text('ACTA DE ENTREGA', pageWidth / 2, 52, { align: 'center' });
+        doc.setFontSize(12);
+        doc.text(`N° ${actaStr}/${year}`, pageWidth / 2, 60, { align: 'center' });
+
+        let y = 78;
+
+        // ===== EMPLOYEE INFO =====
         const baseDelivery = deliveriesArr[0];
-
+        doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
-        doc.text('ID Asignación Múltiple:', 20, y);
-        doc.setFont('helvetica', 'normal');
-        doc.text(`MULTI-${baseDelivery.id}-${new Date(baseDelivery.created_at).getTime().toString().substr(-6)}`, 80, y);
+        doc.text(baseDelivery.employee_name.toUpperCase(), margin, y);
         y += 7;
-        doc.setFont('helvetica', 'bold');
-        doc.text('Fecha / Hora:', 20, y);
         doc.setFont('helvetica', 'normal');
-        // Fix timezone by replacing space with T and adding Z to force UTC parsing
-        const dateStr = baseDelivery.created_at ? baseDelivery.created_at.replace(' ', 'T') + 'Z' : new Date();
-        doc.text(new Date(dateStr).toLocaleString('es'), 80, y);
-        y += 15;
-
-        // Employee section
-        doc.setFillColor(240, 240, 240);
-        doc.rect(15, y - 5, pageWidth - 30, 28, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.text('EMPLEADO RECEPTOR', 20, y + 2);
-        y += 10;
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Nombre: ${baseDelivery.employee_name}`, 25, y);
+        doc.text(`CC ${baseDelivery.employee_code}`, margin, y);
         y += 7;
-        doc.text(`Cédula: ${baseDelivery.employee_code} — Depto: ${baseDelivery.department}`, 25, y);
-        y += 15;
-
-        // Delivered by
-        doc.setFont('helvetica', 'bold');
-        doc.text('Entregado por:', 20, y);
-        doc.setFont('helvetica', 'normal');
-        doc.text(baseDelivery.delivered_by || 'Bodeguero Operativo', 80, y);
-        y += 15;
-
-        // Products List
-        doc.setFont('helvetica', 'bold');
-        doc.text('EQUIPOS / ELEMENTOS ASIGNADOS', 20, y);
-        y += 8;
-
-        doc.setFontSize(9);
-        doc.setDrawColor(200);
-        doc.line(20, y - 4, pageWidth - 20, y - 4);
-
-        doc.text('CÓDIGO', 22, y);
-        doc.text('DESCRIPCIÓN', 60, y);
-        doc.text('CATEGORÍA', 140, y);
-        doc.text('CANT', 180, y);
-        y += 5;
-        doc.line(20, y - 4, pageWidth - 20, y - 4);
-
-        doc.setFont('helvetica', 'normal');
-        deliveriesArr.forEach(d => {
-            if (y > 250) {
-                doc.addPage();
-                y = 20;
-            }
-            // Clip strings if too long
-            const nameStr = d.product_name.length > 40 ? d.product_name.substring(0, 38) + '...' : d.product_name;
-            const codeStr = d.product_code.length > 15 ? d.product_code.substring(0, 13) + '..' : d.product_code;
-            const catStr = d.category.length > 15 ? d.category.substring(0, 13) + '..' : d.category;
-
-            doc.text(codeStr, 22, y);
-            doc.text(nameStr, 60, y);
-            doc.text(catStr, 140, y);
-            doc.text(d.quantity.toString(), 180, y);
-            y += 6;
-        });
-
-        doc.line(20, y - 2, pageWidth - 20, y - 2);
-        y += 15;
-
-        // Signature
-        if (baseDelivery.signature_data) {
-            if (y > 220) { doc.addPage(); y = 20; }
-            doc.setFont('helvetica', 'bold');
-            doc.text('Firma del Receptor (Acepta responsabilidad sobre los equipos):', 20, y);
-            y += 5;
-            try {
-                doc.addImage(baseDelivery.signature_data, 'PNG', 20, y, 80, 40);
-            } catch (e) { /* ignore */ }
-            y += 45;
+        if (baseDelivery.department) {
+            doc.text(`Departamento: ${baseDelivery.department}`, margin, y);
+            y += 7;
         }
 
-        doc.setDrawColor(200, 200, 200);
-        doc.line(20, y, pageWidth - 20, y);
         y += 10;
 
-        // Footer
-        doc.setFontSize(8);
-        doc.setTextColor(128, 128, 128);
-        doc.text('Este documento certifica la entrega técnica y asignación de los equipos descritos amparado al perfil del empleado.', pageWidth / 2, y, { align: 'center' });
+        // ===== SE LE HACE ENTREGA DE =====
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('SE LE HACE ENTREGA DE:', margin, y);
+        y += 10;
+
+        // Items table
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        deliveriesArr.forEach((d, idx) => {
+            if (y > 230) {
+                doc.addPage();
+                y = 25;
+            }
+            const itemText = `${idx + 1}. ${d.product_name} (Código: ${d.product_code}) — Cant: ${d.quantity}`;
+            doc.text(itemText, margin + 5, y);
+            y += 7;
+        });
+
+        y += 12;
+
+        // ===== LEGAL TEXT =====
+        if (y > 220) { doc.addPage(); y = 25; }
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        const legalText1 = 'El equipo es entregado en forma de préstamo ya que el mismo siempre será de SEGURIDAD NACIONAL LTDA';
+        const splitText1 = doc.splitTextToSize(legalText1, contentWidth);
+        doc.text(splitText1, margin, y);
+        y += splitText1.length * 6 + 8;
+
+        const legalText2 = 'El responsable del elemento será totalmente la persona que lo use, por lo que ante perdida o daño deberá de manera inmediata reponerlo en las mismas condiciones.';
+        const splitText2 = doc.splitTextToSize(legalText2, contentWidth);
+        doc.text(splitText2, margin, y);
+        y += splitText2.length * 6 + 12;
+
+        // ===== PARA CONSTANCIA SE FIRMA =====
+        const now = new Date();
+        const dia = now.getDate();
+        const meses = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+        const mes = meses[now.getMonth()];
+        const anio = now.getFullYear();
+        const hora = now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+        doc.setFont('helvetica', 'normal');
+        const constanciaText = `Para constancia se firma a los (${dia} días del mes ${mes} del ${anio} — ${hora})`;
+        doc.text(constanciaText, margin, y);
+        y += 18;
+
+        // ===== NOMBRE Y CEDULA DEL PUESTO =====
+        if (y > 230) { doc.addPage(); y = 25; }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('NOMBRE Y NUMERO DE CEDULA LEGIBLE DEL PUESTO', margin, y);
+        y += 15;
+
+        // ===== RECIBIDO SECTION =====
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.text('Recibido:', margin, y);
+        // Draw signature if available
+        if (baseDelivery.signature_data) {
+            try {
+                doc.addImage(baseDelivery.signature_data, 'PNG', margin + 30, y - 18, 70, 25);
+            } catch (e) { /* ignore */ }
+        }
         y += 5;
-        doc.text(`Generado automáticamente — ${new Date().toLocaleString('es')}`, pageWidth / 2, y, { align: 'center' });
+        doc.setDrawColor(0);
+        doc.line(margin + 30, y, margin + 130, y);
+        y += 10;
+
+        doc.text('Cédula:', margin, y);
+        doc.setFont('helvetica', 'normal');
+        doc.text(baseDelivery.employee_code, margin + 30, y);
+        doc.setDrawColor(0);
+        doc.line(margin + 30, y + 2, margin + 130, y + 2);
+        y += 10;
+
+        doc.setFont('helvetica', 'bold');
+        doc.text('Fecha:', margin, y);
+        doc.setFont('helvetica', 'normal');
+        const fechaCompleta = `${dia}/${String(now.getMonth() + 1).padStart(2, '0')}/${anio} — ${hora}`;
+        doc.text(fechaCompleta, margin + 30, y);
+        doc.setDrawColor(0);
+        doc.line(margin + 30, y + 2, margin + 130, y + 2);
+        y += 15;
+
+        // ===== FOOTER =====
+        doc.setFontSize(7);
+        doc.setTextColor(128, 128, 128);
+        doc.text(`Acta N° ${actaStr}/${year} — Generado automáticamente por el sistema de inventario Seguridad Nacional`, pageWidth / 2, 285, { align: 'center' });
 
         return doc;
     };
@@ -324,7 +352,7 @@ export default function Scanner() {
                 quantity: item.quantity
             }));
 
-            const deliveries = await createBulkDelivery({
+            const result = await createBulkDelivery({
                 employee_id: selectedEmployee.id,
                 products: productPayload,
                 signature_data: finalSignature,
@@ -332,16 +360,21 @@ export default function Scanner() {
                 notes: 'Asignación masiva vía Scanner Móvil'
             });
 
+            // Server now returns { deliveries: [...], acta_number: N }
+            const deliveries = result.deliveries || result;
+            const actaNumber = result.acta_number || 1;
+
             setDeliveryResult(deliveries);
 
-            // Generate and download combined PDF
+            // Generate and download Acta de Entrega PDF
             if (deliveries && deliveries.length > 0) {
-                const doc = generatePDF(deliveries);
-                doc.save(`Asignacion_${selectedEmployee.employee_id}_${Date.now()}.pdf`);
+                const doc = generatePDF(deliveries, actaNumber);
+                const actaStr = String(actaNumber).padStart(4, '0');
+                doc.save(`Acta_Entrega_${actaStr}_${selectedEmployee.employee_id}.pdf`);
             }
 
             setStep('complete');
-            addToast('¡Equipos asignados y PDF generado!', 'success');
+            addToast('¡Equipos asignados y Acta de Entrega generada!', 'success');
         } catch (err) {
             addToast(err.message || 'Error al registrar la entrega masiva', 'error');
         } finally {
@@ -612,7 +645,7 @@ export default function Scanner() {
                     </div>
 
                     <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-xl)' }}>
-                        El PDF de entrega múltiple se ha descargado automáticamente. Los equipos ya figuran en la hoja de vida de equipos asignados al colaborador.
+                        El Acta de Entrega (PDF) se ha descargado automáticamente. Los equipos ya figuran en la hoja de vida de equipos asignados al colaborador.
                     </p>
 
                     <button className="btn btn-primary" onClick={resetScanner} style={{ width: '100%', padding: '1rem' }}>

@@ -569,9 +569,15 @@ app.post('/api/deliveries/bulk', (req, res) => {
         }
 
         const deliveryIds = [];
+        let actaNumber = 0;
 
         // Transaction for all operations
         const createBulkDeliveries = db.transaction(() => {
+            // Increment acta counter atomically
+            db.prepare('UPDATE counters SET value = value + 1 WHERE key = ?').run('acta_entrega');
+            const counter = db.prepare('SELECT value FROM counters WHERE key = ?').get('acta_entrega');
+            actaNumber = counter.value;
+
             for (const { product, qty } of productInfos) {
                 // Insert delivery
                 const result = db.prepare(`
@@ -616,7 +622,8 @@ app.post('/api/deliveries/bulk', (req, res) => {
         emitUpdate('product:updated', {});
         emitUpdate('assignment:created', { employee_id });
 
-        res.status(201).json(deliveries);
+        // Return deliveries with the acta number
+        res.status(201).json({ deliveries, acta_number: actaNumber });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
